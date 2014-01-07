@@ -46,7 +46,17 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	// This setup prevents shell injection.
-	cgiargs := []string{"-c", "cd /home/cgi-bin && /home/cgi-bin/\"$1\"", user[0], "--", "-", filepath}
+	// Try first /home/cgi-bin, then /home/tool/cgi-bin
+	code := `
+		if [ -x /home/cgi-bin/"$1" ]; then
+			cd /home/cgi-bin && /home/cgi-bin/"$1"
+		elif [ -x /home/tool/cgi-bin/"$1" ]; then
+			cd /home/tool/cgi-bin && /home/tool/cgi-bin/"$1"
+		else
+			echo Status: 404 Not Found
+		fi
+	`
+	cgiargs := []string{"-c", code, user[0], "--", "-", filepath}
 	if os.Getuid() == 0 {
 		cgipath = "su"
 	}
@@ -55,7 +65,6 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Print(cgipath, cgiargs)
 	// on Dir: In the usual case where we're su'ing into a
 	// box, setting Dir has no effect because the PAM
 	// chroot module changes the current directory
